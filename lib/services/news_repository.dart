@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../models/news_article.dart';
+import '../models/news_category.dart';
 
 abstract interface class NewsRepository {
   Future<List<NewsArticle>> fetchTopStories({String category = 'arts'});
@@ -14,16 +15,13 @@ class NyTimesNewsRepository implements NewsRepository {
     : _client = client ?? http.Client(),
       _apiKey = apiKey ?? '';
 
-  static const supportedCategory = 'arts';
   static const _baseUrl = 'api.nytimes.com';
 
   final http.Client _client;
   final String _apiKey;
 
   @override
-  Future<List<NewsArticle>> fetchTopStories({
-    String category = supportedCategory,
-  }) async {
+  Future<List<NewsArticle>> fetchTopStories({String category = 'arts'}) async {
     final normalizedKey = _apiKey.trim();
     if (normalizedKey.isEmpty || normalizedKey == 'coloque_sua_chave_aqui') {
       throw const NewsApiException(
@@ -31,10 +29,8 @@ class NyTimesNewsRepository implements NewsRepository {
       );
     }
 
-    if (category != supportedCategory) {
-      throw const NewsApiException(
-        'Neste MVP, apenas a categoria arts está disponível.',
-      );
+    if (!NewsCategory.supports(category)) {
+      throw NewsApiException('Categoria não suportada: $category.');
     }
 
     final uri = Uri.https(_baseUrl, '/svc/topstories/v2/$category.json', {

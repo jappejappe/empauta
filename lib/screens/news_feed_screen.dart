@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/news_article.dart';
+import '../models/news_category.dart';
 import '../services/news_repository.dart';
+import '../widgets/category_end_page.dart';
 import '../widgets/news_story_page.dart';
 
 class NewsFeedScreen extends StatefulWidget {
@@ -19,12 +21,15 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
   late Future<List<NewsArticle>> _stories;
   final PageController _pageController = PageController();
   final Set<String> _savedStoryIds = {};
+  NewsCategory _selectedCategory = NewsCategory.arts;
   int _currentPage = 0;
 
   @override
   void initState() {
     super.initState();
-    _stories = widget.repository.fetchTopStories();
+    _stories = widget.repository.fetchTopStories(
+      category: _selectedCategory.slug,
+    );
   }
 
   @override
@@ -36,11 +41,50 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
   void _reload() {
     setState(() {
       _currentPage = 0;
-      _stories = widget.repository.fetchTopStories();
+      _stories = widget.repository.fetchTopStories(
+        category: _selectedCategory.slug,
+      );
     });
     if (_pageController.hasClients) {
       _pageController.jumpToPage(0);
     }
+  }
+
+  void _selectCategory(NewsCategory category) {
+    if (category.slug == _selectedCategory.slug) return;
+
+    setState(() {
+      _selectedCategory = category;
+      _currentPage = 0;
+      _stories = widget.repository.fetchTopStories(category: category.slug);
+    });
+    if (_pageController.hasClients) {
+      _pageController.jumpToPage(0);
+    }
+  }
+
+  Future<void> _showCategoryPicker() async {
+    final category = await showModalBottomSheet<NewsCategory>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: const Color(0xFFF7F4EE),
+      showDragHandle: true,
+      builder: (context) => _CategorySheet(selectedCategory: _selectedCategory),
+    );
+
+    if (!mounted || category == null) return;
+    _selectCategory(category);
+  }
+
+  List<NewsCategory> _suggestionsFor(NewsCategory category) {
+    final currentIndex = NewsCategory.all.indexWhere(
+      (item) => item.slug == category.slug,
+    );
+    return List.generate(4, (offset) {
+      final index = (currentIndex + offset + 1) % NewsCategory.all.length;
+      return NewsCategory.all[index];
+    }, growable: false);
   }
 
   void _toggleSaved(NewsArticle article) {
@@ -95,7 +139,9 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
           final stories = snapshot.data ?? const [];
           if (stories.isEmpty) {
             return _ErrorView(
-              message: 'Nenhuma notícia de artes foi encontrada agora.',
+              message:
+                  'Nenhuma notícia de ${_selectedCategory.label.toLowerCase()} '
+                  'foi encontrada agora.',
               onRetry: _reload,
             );
           }
@@ -106,9 +152,17 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
                 key: const Key('news-feed'),
                 controller: _pageController,
                 scrollDirection: Axis.vertical,
-                itemCount: stories.length,
+                itemCount: stories.length + 1,
                 onPageChanged: (index) => setState(() => _currentPage = index),
                 itemBuilder: (context, index) {
+                  if (index == stories.length) {
+                    return CategoryEndPage(
+                      category: _selectedCategory,
+                      suggestions: _suggestionsFor(_selectedCategory),
+                      onSelectCategory: _selectCategory,
+                    );
+                  }
+
                   final article = stories[index];
                   return NewsStoryPage(
                     article: article,
@@ -120,8 +174,11 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
                 },
               ),
               _FeedHeader(
+                category: _selectedCategory,
                 currentPage: _currentPage + 1,
                 totalPages: stories.length,
+                isEnd: _currentPage >= stories.length,
+                onCategoryTap: _showCategoryPicker,
                 onRefresh: _reload,
               ),
             ],
@@ -132,6 +189,10 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
         selectedIndex: 0,
         onDestinationSelected: (index) {
           if (index == 0) return;
+          if (index == 1) {
+            _showCategoryPicker();
+            return;
+          }
           const destinations = ['Início', 'Temas', 'Salvos', 'Perfil'];
           _showComingSoon(destinations[index]);
         },
@@ -161,13 +222,19 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
 
 class _FeedHeader extends StatelessWidget {
   const _FeedHeader({
+    required this.category,
     required this.currentPage,
     required this.totalPages,
+    required this.isEnd,
+    required this.onCategoryTap,
     required this.onRefresh,
   });
 
+  final NewsCategory category;
   final int currentPage;
   final int totalPages;
+  final bool isEnd;
+  final VoidCallback onCategoryTap;
   final VoidCallback onRefresh;
 
   @override
@@ -190,13 +257,13 @@ class _FeedHeader extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 8, 12, 36),
             child: Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerLeft,
                     child: Row(
                       children: [
-                        Text(
+                        const Text(
                           'empauta',
                           style: TextStyle(
                             color: Colors.white,
@@ -205,15 +272,15 @@ class _FeedHeader extends StatelessWidget {
                             letterSpacing: -1.2,
                           ),
                         ),
-                        SizedBox(width: 14),
-                        _CategoryPill(),
+                        const SizedBox(width: 14),
+                        _CategoryPill(category: category, onTap: onCategoryTap),
                       ],
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  '$currentPage/$totalPages',
+                  isEnd ? 'Fim' : '$currentPage/$totalPages',
                   style: const TextStyle(
                     color: Colors.white70,
                     fontSize: 12,
@@ -235,33 +302,186 @@ class _FeedHeader extends StatelessWidget {
 }
 
 class _CategoryPill extends StatelessWidget {
-  const _CategoryPill();
+  const _CategoryPill({required this.category, required this.onTap});
+
+  final NewsCategory category;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEAF2EC),
+    return Material(
+      color: const Color(0xFFEAF2EC),
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        key: const Key('category-picker-button'),
+        onTap: onTap,
         borderRadius: BorderRadius.circular(999),
-      ),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.palette_outlined, size: 15, color: Color(0xFF244C38)),
-          SizedBox(width: 6),
-          Text(
-            'Artes',
-            style: TextStyle(
-              color: Color(0xFF244C38),
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-            ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _iconForCategory(category.slug),
+                size: 15,
+                color: const Color(0xFF244C38),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                category.label,
+                style: const TextStyle(
+                  color: Color(0xFF244C38),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 3),
+              const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 15,
+                color: Color(0xFF244C38),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
+}
+
+class _CategorySheet extends StatelessWidget {
+  const _CategorySheet({required this.selectedCategory});
+
+  final NewsCategory selectedCategory;
+
+  @override
+  Widget build(BuildContext context) {
+    return FractionallySizedBox(
+      heightFactor: 0.78,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Escolha sua pauta',
+              style: TextStyle(
+                color: Color(0xFF1D211F),
+                fontSize: 26,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.7,
+              ),
+            ),
+            const SizedBox(height: 5),
+            const Text(
+              'Selecione um tema para atualizar o feed.',
+              style: TextStyle(color: Color(0xFF66706A), fontSize: 14),
+            ),
+            const SizedBox(height: 18),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final columns = constraints.maxWidth >= 600 ? 4 : 2;
+                  return GridView.builder(
+                    key: const Key('category-grid'),
+                    itemCount: NewsCategory.all.length,
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: columns,
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 10,
+                      childAspectRatio: 2.35,
+                    ),
+                    itemBuilder: (context, index) {
+                      final category = NewsCategory.all[index];
+                      final isSelected = category.slug == selectedCategory.slug;
+                      return Material(
+                        color: isSelected
+                            ? const Color(0xFF244C38)
+                            : const Color(0xFFE9ECE8),
+                        borderRadius: BorderRadius.circular(14),
+                        child: InkWell(
+                          key: ValueKey('category-${category.slug}'),
+                          onTap: () => Navigator.pop(context, category),
+                          borderRadius: BorderRadius.circular(14),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  _iconForCategory(category.slug),
+                                  size: 19,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : const Color(0xFF244C38),
+                                ),
+                                const SizedBox(width: 9),
+                                Expanded(
+                                  child: Text(
+                                    category.label,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: isSelected
+                                          ? Colors.white
+                                          : const Color(0xFF1D211F),
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                                if (isSelected)
+                                  const Icon(
+                                    Icons.check_rounded,
+                                    size: 17,
+                                    color: Colors.white,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+IconData _iconForCategory(String slug) {
+  return switch (slug) {
+    'arts' => Icons.palette_outlined,
+    'automobiles' => Icons.directions_car_outlined,
+    'books/review' => Icons.menu_book_outlined,
+    'business' => Icons.business_center_outlined,
+    'fashion' => Icons.checkroom_outlined,
+    'food' => Icons.restaurant_outlined,
+    'health' => Icons.health_and_safety_outlined,
+    'home' => Icons.home_outlined,
+    'insider' => Icons.lock_open_outlined,
+    'magazine' => Icons.auto_stories_outlined,
+    'movies' => Icons.movie_outlined,
+    'nyregion' => Icons.location_city_outlined,
+    'obituaries' => Icons.history_edu_outlined,
+    'opinion' => Icons.forum_outlined,
+    'politics' => Icons.account_balance_outlined,
+    'realestate' => Icons.apartment_outlined,
+    'science' => Icons.science_outlined,
+    'sports' => Icons.sports_soccer_outlined,
+    'sundayreview' => Icons.newspaper_outlined,
+    'technology' => Icons.devices_outlined,
+    'theater' => Icons.theater_comedy_outlined,
+    't-magazine' => Icons.style_outlined,
+    'travel' => Icons.flight_outlined,
+    'upshot' => Icons.insights_outlined,
+    'us' => Icons.flag_outlined,
+    'world' => Icons.public_outlined,
+    _ => Icons.newspaper_outlined,
+  };
 }
 
 class _LoadingView extends StatelessWidget {

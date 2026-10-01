@@ -1,21 +1,27 @@
 # empauta
 
-MVP mobile em Flutter para consumir as principais notícias de **Artes** do New
-York Times em um feed vertical, uma matéria por tela.
+MVP mobile em Flutter para consumir as principais notícias do New York Times em
+um feed vertical, uma matéria por tela.
 
 ## O que já funciona
 
-- consulta à categoria `arts` da Top Stories API;
+- consulta às 26 categorias disponíveis da Top Stories API;
+- seletor de temas pelo cabeçalho e pela navegação inferior;
 - modelos Dart tipados com `factory fromJson` para resposta, notícia e imagem;
 - feed vertical no estilo Reels;
+- tela de fim da categoria com quatro sugestões para continuar lendo;
 - imagem, título, resumo, autoria e data de cada notícia;
 - abrir a matéria original no navegador;
 - copiar o link e salvar itens durante a sessão;
 - estados de carregamento, erro, chave ausente e lista vazia;
 - navegação visual baseada no wireframe do Figma.
 
-As outras categorias e as telas Temas, Salvos e Perfil estão sinalizadas na
-interface, mas ficam fora deste MVP.
+Categorias disponíveis: Artes, Automóveis, Livros, Negócios, Moda, Gastronomia,
+Saúde, Casa, Insider, Revista, Cinema, Nova York, Obituários, Opinião, Política,
+Imóveis, Ciência, Esportes, Sunday Review, Tecnologia, Teatro, T Magazine,
+Viagem, The Upshot, Estados Unidos e Mundo.
+
+As telas completas de Salvos e Perfil continuam fora deste MVP.
 
 ## Configuração
 
@@ -34,10 +40,10 @@ flutter pub get
 flutter run
 ```
 
-O endpoint usado é:
+O endpoint muda conforme a categoria selecionada:
 
 ```text
-https://api.nytimes.com/svc/topstories/v2/arts.json?api-key=SUA_CHAVE
+https://api.nytimes.com/svc/topstories/v2/{categoria}.json?api-key=SUA_CHAVE
 ```
 
 > O `.env` está no `.gitignore`. O arquivo `.env.example` pode ser versionado
@@ -49,6 +55,7 @@ https://api.nytimes.com/svc/topstories/v2/arts.json?api-key=SUA_CHAVE
 
 ```text
 lib/
+├── models/news_category.dart
 ├── models/news_article.dart
 ├── screens/news_feed_screen.dart
 ├── services/news_repository.dart
