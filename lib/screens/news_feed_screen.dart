@@ -5,28 +5,42 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/news_article.dart';
 import '../models/news_category.dart';
 import '../services/news_repository.dart';
+import '../services/translation_service.dart';
+import '../widgets/app_logo.dart';
 import '../widgets/category_end_page.dart';
+import '../widgets/flag_icon.dart';
 import '../widgets/news_story_page.dart';
 
 class NewsFeedScreen extends StatefulWidget {
-  const NewsFeedScreen({super.key, required this.repository});
+  const NewsFeedScreen({
+    super.key,
+    required this.repository,
+    this.translationService,
+  });
 
   final NewsRepository repository;
+  final TranslationService? translationService;
 
   @override
   State<NewsFeedScreen> createState() => _NewsFeedScreenState();
 }
 
 class _NewsFeedScreenState extends State<NewsFeedScreen> {
+  late final TranslationService _translationService;
   late Future<List<NewsArticle>> _stories;
   final PageController _pageController = PageController();
   final Set<String> _savedStoryIds = {};
   NewsCategory _selectedCategory = NewsCategory.arts;
   int _currentPage = 0;
+  bool _isTranslated = false;
+  bool _isTranslating = false;
+  final Map<String, NewsArticle> _translatedArticles = {};
+  final Set<String> _pendingTranslations = {};
 
   @override
   void initState() {
     super.initState();
+    _translationService = widget.translationService ?? TranslationService();
     _stories = widget.repository.fetchTopStories(
       category: _selectedCategory.slug,
     );
@@ -41,9 +55,14 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
   void _reload() {
     setState(() {
       _currentPage = 0;
-      _stories = widget.repository.fetchTopStories(
-        category: _selectedCategory.slug,
-      );
+      _stories = widget.repository
+          .fetchTopStories(category: _selectedCategory.slug)
+          .then((list) {
+            if (_isTranslated) {
+              _pretranslateFeed(list);
+            }
+            return list;
+          });
     });
     if (_pageController.hasClients) {
       _pageController.jumpToPage(0);
@@ -56,10 +75,105 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
     setState(() {
       _selectedCategory = category;
       _currentPage = 0;
-      _stories = widget.repository.fetchTopStories(category: category.slug);
+      _stories = widget.repository
+          .fetchTopStories(category: category.slug)
+          .then((list) {
+            if (_isTranslated) {
+              _pretranslateFeed(list);
+            }
+            return list;
+          });
     });
     if (_pageController.hasClients) {
       _pageController.jumpToPage(0);
+    }
+  }
+
+  void _pretranslateFeed(List<NewsArticle> list) {
+    for (final article in list) {
+      _translateSingleArticle(article);
+    }
+  }
+
+  void _translateSingleArticle(NewsArticle article) {
+    if (_translatedArticles.containsKey(article.id) ||
+        _pendingTranslations.contains(article.id)) {
+      return;
+    }
+    _pendingTranslations.add(article.id);
+    _translationService
+        .translateArticle(article)
+        .then((translated) {
+          _translatedArticles[article.id] = translated;
+          _pendingTranslations.remove(article.id);
+          if (mounted && _isTranslated) {
+            setState(() {});
+          }
+        })
+        .catchError((_) {
+          _pendingTranslations.remove(article.id);
+        });
+  }
+
+  Future<void> _toggleTranslation(List<NewsArticle> stories) async {
+    if (_isTranslated) {
+      setState(() => _isTranslated = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Exibindo notícias no idioma original (inglês) 🇺🇸'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      return;
+    }
+
+    setState(() {
+      _isTranslated = true;
+      _isTranslating = true;
+    });
+
+    if (stories.isEmpty) {
+      if (mounted) setState(() => _isTranslating = false);
+      return;
+    }
+
+    // 1. Prioritize translating the current visible story
+    final visibleIndex = _currentPage.clamp(0, stories.length - 1);
+    final visibleStory = stories[visibleIndex];
+    if (!_translatedArticles.containsKey(visibleStory.id)) {
+      final translated = await _translationService.translateArticle(
+        visibleStory,
+      );
+      _translatedArticles[visibleStory.id] = translated;
+      if (mounted) setState(() {});
+    }
+
+    // 2. Translate other stories in the feed in parallel
+    final remaining = stories
+        .where((s) => !_translatedArticles.containsKey(s.id))
+        .toList();
+    if (remaining.isNotEmpty) {
+      await Future.wait(
+        remaining.map((s) async {
+          final translated = await _translationService.translateArticle(s);
+          _translatedArticles[s.id] = translated;
+        }),
+      );
+    }
+
+    if (mounted) {
+      setState(() => _isTranslating = false);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Notícias traduzidas para o português 🇧🇷'),
+            duration: Duration(seconds: 2),
+          ),
+        );
     }
   }
 
@@ -68,7 +182,7 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: const Color(0xFFF7F4EE),
+      backgroundColor: const Color(0xFFFDFBF9),
       showDragHandle: true,
       builder: (context) => _CategorySheet(selectedCategory: _selectedCategory),
     );
@@ -163,10 +277,23 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
                     );
                   }
 
-                  final article = stories[index];
+                  final originalArticle = stories[index];
+                  if (_isTranslated &&
+                      !_translatedArticles.containsKey(originalArticle.id)) {
+                    _translateSingleArticle(originalArticle);
+                  }
+                  final article =
+                      (_isTranslated &&
+                          _translatedArticles.containsKey(originalArticle.id))
+                      ? _translatedArticles[originalArticle.id]!
+                      : originalArticle;
+
                   return NewsStoryPage(
                     article: article,
                     isSaved: _savedStoryIds.contains(article.id),
+                    isTranslated:
+                        _isTranslated &&
+                        _translatedArticles.containsKey(originalArticle.id),
                     onSave: () => _toggleSaved(article),
                     onShare: () => _copyLink(article),
                     onOpen: () => _openArticle(article),
@@ -178,7 +305,10 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
                 currentPage: _currentPage + 1,
                 totalPages: stories.length,
                 isEnd: _currentPage >= stories.length,
+                isTranslated: _isTranslated,
+                isTranslating: _isTranslating,
                 onCategoryTap: _showCategoryPicker,
+                onTranslationTap: () => _toggleTranslation(stories),
                 onRefresh: _reload,
               ),
             ],
@@ -226,7 +356,10 @@ class _FeedHeader extends StatelessWidget {
     required this.currentPage,
     required this.totalPages,
     required this.isEnd,
+    required this.isTranslated,
+    required this.isTranslating,
     required this.onCategoryTap,
+    required this.onTranslationTap,
     required this.onRefresh,
   });
 
@@ -234,7 +367,10 @@ class _FeedHeader extends StatelessWidget {
   final int currentPage;
   final int totalPages;
   final bool isEnd;
+  final bool isTranslated;
+  final bool isTranslating;
   final VoidCallback onCategoryTap;
+  final VoidCallback onTranslationTap;
   final VoidCallback onRefresh;
 
   @override
@@ -263,17 +399,15 @@ class _FeedHeader extends StatelessWidget {
                     alignment: Alignment.centerLeft,
                     child: Row(
                       children: [
-                        const Text(
-                          'empauta',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 28,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -1.2,
-                          ),
-                        ),
+                        const AppLogo(),
                         const SizedBox(width: 14),
                         _CategoryPill(category: category, onTap: onCategoryTap),
+                        const SizedBox(width: 8),
+                        _TranslationFlagButton(
+                          isTranslated: isTranslated,
+                          isTranslating: isTranslating,
+                          onTap: onTranslationTap,
+                        ),
                       ],
                     ),
                   ),
@@ -301,6 +435,67 @@ class _FeedHeader extends StatelessWidget {
   }
 }
 
+class _TranslationFlagButton extends StatelessWidget {
+  const _TranslationFlagButton({
+    required this.isTranslated,
+    required this.isTranslating,
+    required this.onTap,
+  });
+
+  final bool isTranslated;
+  final bool isTranslating;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: isTranslated ? const Color(0xFFFDEEEB) : const Color(0x33FFFFFF),
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        key: const Key('translation-flag-button'),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6.5),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isTranslating)
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Color(0xFFE34B36),
+                  ),
+                )
+              else
+                const BrazilFlagIcon(width: 18, height: 13),
+              const SizedBox(width: 6),
+              Text(
+                isTranslated ? 'PT' : 'Traduzir',
+                style: TextStyle(
+                  color: isTranslated ? const Color(0xFFC83824) : Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              if (isTranslated) ...[
+                const SizedBox(width: 3),
+                const Icon(
+                  Icons.check_rounded,
+                  size: 14,
+                  color: Color(0xFFE34B36),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _CategoryPill extends StatelessWidget {
   const _CategoryPill({required this.category, required this.onTap});
 
@@ -310,7 +505,7 @@ class _CategoryPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xFFEAF2EC),
+      color: const Color(0xFFFDEEEB),
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         key: const Key('category-picker-button'),
@@ -324,13 +519,13 @@ class _CategoryPill extends StatelessWidget {
               Icon(
                 _iconForCategory(category.slug),
                 size: 15,
-                color: const Color(0xFF244C38),
+                color: const Color(0xFFE34B36),
               ),
               const SizedBox(width: 6),
               Text(
                 category.label,
                 style: const TextStyle(
-                  color: Color(0xFF244C38),
+                  color: Color(0xFFC83824),
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                 ),
@@ -339,7 +534,7 @@ class _CategoryPill extends StatelessWidget {
               const Icon(
                 Icons.keyboard_arrow_down_rounded,
                 size: 15,
-                color: Color(0xFF244C38),
+                color: Color(0xFFE34B36),
               ),
             ],
           ),
@@ -353,6 +548,8 @@ class _CategorySheet extends StatelessWidget {
   const _CategorySheet({required this.selectedCategory});
 
   final NewsCategory selectedCategory;
+
+  static const _brandOrange = Color(0xFFE34B36);
 
   @override
   Widget build(BuildContext context) {
@@ -375,7 +572,7 @@ class _CategorySheet extends StatelessWidget {
             const SizedBox(height: 5),
             const Text(
               'Selecione um tema para atualizar o feed.',
-              style: TextStyle(color: Color(0xFF66706A), fontSize: 14),
+              style: TextStyle(color: Color(0xFF756763), fontSize: 14),
             ),
             const SizedBox(height: 18),
             Expanded(
@@ -396,9 +593,17 @@ class _CategorySheet extends StatelessWidget {
                       final isSelected = category.slug == selectedCategory.slug;
                       return Material(
                         color: isSelected
-                            ? const Color(0xFF244C38)
-                            : const Color(0xFFE9ECE8),
-                        borderRadius: BorderRadius.circular(14),
+                            ? _brandOrange
+                            : const Color(0xFFFBF4F1),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          side: BorderSide(
+                            color: isSelected
+                                ? _brandOrange
+                                : const Color(0xFFF0E4DE),
+                            width: 1,
+                          ),
+                        ),
                         child: InkWell(
                           key: ValueKey('category-${category.slug}'),
                           onTap: () => Navigator.pop(context, category),
@@ -407,12 +612,22 @@ class _CategorySheet extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(horizontal: 12),
                             child: Row(
                               children: [
-                                Icon(
-                                  _iconForCategory(category.slug),
-                                  size: 19,
-                                  color: isSelected
-                                      ? Colors.white
-                                      : const Color(0xFF244C38),
+                                Container(
+                                  width: 28,
+                                  height: 28,
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? Colors.white.withValues(alpha: 0.22)
+                                        : const Color(0xFFFDEEEB),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    _iconForCategory(category.slug),
+                                    size: 16,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : _brandOrange,
+                                  ),
                                 ),
                                 const SizedBox(width: 9),
                                 Expanded(
@@ -456,14 +671,12 @@ IconData _iconForCategory(String slug) {
   return switch (slug) {
     'arts' => Icons.palette_outlined,
     'automobiles' => Icons.directions_car_outlined,
-    'books/review' => Icons.menu_book_outlined,
     'business' => Icons.business_center_outlined,
     'fashion' => Icons.checkroom_outlined,
     'food' => Icons.restaurant_outlined,
     'health' => Icons.health_and_safety_outlined,
     'home' => Icons.home_outlined,
     'insider' => Icons.lock_open_outlined,
-    'magazine' => Icons.auto_stories_outlined,
     'movies' => Icons.movie_outlined,
     'nyregion' => Icons.location_city_outlined,
     'obituaries' => Icons.history_edu_outlined,
@@ -529,14 +742,7 @@ class _ErrorView extends StatelessWidget {
                 color: Color(0xFFE34B36),
               ),
               const SizedBox(height: 20),
-              const Text(
-                'empauta',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 32,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
+              const AppLogo(fontSize: 32),
               const SizedBox(height: 12),
               Text(
                 message,

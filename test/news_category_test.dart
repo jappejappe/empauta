@@ -6,14 +6,12 @@ void main() {
     const expectedSlugs = [
       'arts',
       'automobiles',
-      'books/review',
       'business',
       'fashion',
       'food',
       'health',
       'home',
       'insider',
-      'magazine',
       'movies',
       'nyregion',
       'obituaries',
@@ -35,7 +33,7 @@ void main() {
     expect(NewsCategory.all.map((category) => category.slug), expectedSlugs);
     expect(
       NewsCategory.all.map((category) => category.slug).toSet(),
-      hasLength(26),
+      hasLength(24),
     );
   });
 }

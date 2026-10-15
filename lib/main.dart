@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'screens/news_feed_screen.dart';
+import 'screens/splash_screen.dart';
 import 'services/news_repository.dart';
 
 Future<void> main() async {
@@ -31,11 +32,23 @@ String _readApiKey(String envFile) {
   return '';
 }
 
-class EmpautaApp extends StatelessWidget {
+class EmpautaApp extends StatefulWidget {
   EmpautaApp({super.key, NewsRepository? repository, String apiKey = ''})
     : repository = repository ?? NyTimesNewsRepository(apiKey: apiKey);
 
   final NewsRepository repository;
+
+  @override
+  State<EmpautaApp> createState() => _EmpautaAppState();
+}
+
+class _EmpautaAppState extends State<EmpautaApp> {
+  bool _showSplash = true;
+
+  void _onSplashFinished() {
+    if (!mounted) return;
+    setState(() => _showSplash = false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +56,7 @@ class EmpautaApp extends StatelessWidget {
     const paperColor = Color(0xFFF7F4EE);
 
     return MaterialApp(
-      title: 'empauta',
+      title: 'Empauta',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
@@ -81,7 +94,9 @@ class EmpautaApp extends StatelessWidget {
       ),
       home: AnnotatedRegion<SystemUiOverlayStyle>(
         value: SystemUiOverlayStyle.light,
-        child: NewsFeedScreen(repository: repository),
+        child: _showSplash
+            ? SplashScreen(onFinished: _onSplashFinished)
+            : NewsFeedScreen(repository: widget.repository),
       ),
     );
   }

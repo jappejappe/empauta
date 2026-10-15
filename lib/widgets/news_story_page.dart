@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/news_article.dart';
+import 'flag_icon.dart';
 
 class NewsStoryPage extends StatelessWidget {
   const NewsStoryPage({
@@ -10,6 +11,7 @@ class NewsStoryPage extends StatelessWidget {
     required this.onSave,
     required this.onShare,
     required this.onOpen,
+    this.isTranslated = false,
   });
 
   final NewsArticle article;
@@ -17,6 +19,7 @@ class NewsStoryPage extends StatelessWidget {
   final VoidCallback onSave;
   final VoidCallback onShare;
   final VoidCallback onOpen;
+  final bool isTranslated;
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +48,11 @@ class NewsStoryPage extends StatelessWidget {
             left: 20,
             right: 82,
             bottom: 112,
-            child: _StoryDetails(article: article, onOpen: onOpen),
+            child: _StoryDetails(
+              article: article,
+              onOpen: onOpen,
+              isTranslated: isTranslated,
+            ),
           ),
           Positioned(
             right: 12,
@@ -95,13 +102,13 @@ class _ImageFallback extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: const Color(0xFF294437),
+      color: const Color(0xFF221614),
       child: DecoratedBox(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF456856), Color(0xFF17271F)],
+            colors: [Color(0xFF3D1D19), Color(0xFF160E0D)],
           ),
         ),
         child: Center(
@@ -119,10 +126,15 @@ class _ImageFallback extends StatelessWidget {
 }
 
 class _StoryDetails extends StatelessWidget {
-  const _StoryDetails({required this.article, required this.onOpen});
+  const _StoryDetails({
+    required this.article,
+    required this.onOpen,
+    this.isTranslated = false,
+  });
 
   final NewsArticle article;
   final VoidCallback onOpen;
+  final bool isTranslated;
 
   @override
   Widget build(BuildContext context) {
@@ -158,16 +170,54 @@ class _StoryDetails extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 14),
-        if (article.subsection.isNotEmpty)
-          Text(
-            article.subsection.toUpperCase(),
-            style: const TextStyle(
-              color: Color(0xFFFF8C75),
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.1,
-            ),
+        if (article.subsection.isNotEmpty || isTranslated) ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              if (article.subsection.isNotEmpty)
+                Text(
+                  article.subsection.toUpperCase(),
+                  style: const TextStyle(
+                    color: Color(0xFFFF8C75),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.1,
+                  ),
+                ),
+              if (isTranslated)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0x33009B3A),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: const Color(0x66009B3A)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      BrazilFlagIcon(width: 12, height: 8),
+                      SizedBox(width: 4),
+                      Text(
+                        'TRADUZIDO',
+                        style: TextStyle(
+                          color: Color(0xFF66E68E),
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
           ),
+          const SizedBox(height: 4),
+        ],
         Text(
           article.title,
           maxLines: 5,

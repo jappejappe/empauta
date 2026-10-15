@@ -18,13 +18,13 @@ class CategoryEndPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return ColoredBox(
       key: const Key('category-end-page'),
-      color: const Color(0xFF101411),
+      color: const Color(0xFF140E0D),
       child: DecoratedBox(
         decoration: const BoxDecoration(
           gradient: RadialGradient(
             center: Alignment(0.65, -0.55),
             radius: 1.15,
-            colors: [Color(0xFF315240), Color(0xFF101411)],
+            colors: [Color(0xFF421812), Color(0xFF140E0D)],
           ),
         ),
         child: SafeArea(
@@ -116,8 +116,11 @@ class _SuggestionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xFFF2F0E9),
-      borderRadius: BorderRadius.circular(16),
+      color: const Color(0xFFFBF4F1),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: Color(0xFFF0E4DE)),
+      ),
       child: InkWell(
         key: ValueKey('end-suggestion-${category.slug}'),
         onTap: onTap,

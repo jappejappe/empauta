@@ -15,9 +15,13 @@ void main() {
 
     final repository = _FakeNewsRepository();
     await tester.pumpWidget(EmpautaApp(repository: repository));
+
+    // Wait through the splash screen animation sequence
+    // (300ms delay + 700ms icon + 150ms + 600ms logo + 100ms + 500ms tagline + 800ms hold + 400ms exit)
+    await tester.pump(const Duration(milliseconds: 3600));
     await tester.pumpAndSettle();
 
-    expect(find.text('empauta'), findsOneWidget);
+    expect(find.text('Empauta.', findRichText: true), findsOneWidget);
     expect(find.text('Artes'), findsOneWidget);
     expect(find.text('Uma história sobre arte'), findsOneWidget);
     expect(find.text('1/2'), findsOneWidget);
@@ -47,15 +51,15 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.byKey(const ValueKey('end-suggestion-books/review')),
-      findsOneWidget,
-    );
-    expect(
       find.byKey(const ValueKey('end-suggestion-business')),
       findsOneWidget,
     );
     expect(
       find.byKey(const ValueKey('end-suggestion-fashion')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('end-suggestion-food')),
       findsOneWidget,
     );
 

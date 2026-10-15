@@ -65,6 +65,32 @@ class NewsArticle {
 
   String get id => uri.isNotEmpty ? uri : url;
 
+  NewsArticle copyWith({
+    String? uri,
+    String? url,
+    String? section,
+    String? subsection,
+    String? title,
+    String? summary,
+    String? byline,
+    DateTime? publishedAt,
+    DateTime? updatedAt,
+    List<NewsImage>? images,
+  }) {
+    return NewsArticle(
+      uri: uri ?? this.uri,
+      url: url ?? this.url,
+      section: section ?? this.section,
+      subsection: subsection ?? this.subsection,
+      title: title ?? this.title,
+      summary: summary ?? this.summary,
+      byline: byline ?? this.byline,
+      publishedAt: publishedAt ?? this.publishedAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      images: images ?? this.images,
+    );
+  }
+
   factory NewsArticle.fromJson(Map<String, dynamic> json) {
     final multimedia = json['multimedia'];
 
